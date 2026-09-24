@@ -1,0 +1,1 @@
+# Smart Complaint Management System uses Python's standard library only.
