@@ -1,211 +1,189 @@
-"""Console entry point for the Smart Complaint Management System."""
+"""Flask web entry point for the Smart Complaint Management System."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import math
+import os
+from datetime import timedelta
+
+from flask import Flask, flash, g, redirect, render_template, request, session, url_for
 
 from db import ComplaintDatabase
-from models import Category, Complaint
 from services.complaint_service import ComplaintService
 
-CATEGORIES: tuple[Category, ...] = (
-    "electrical",
-    "plumbing",
-    "academic",
-    "hostel",
-    "other",
-)
+app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "local-development-key")
+app.config.setdefault("DATABASE_PATH", "complaints.db")
 
 
-def prompt_non_empty(label: str) -> str:
-    while True:
-        value = input(label).strip()
-        if value:
-            return value
-        print("This field cannot be empty.")
+def get_service() -> ComplaintService:
+    if "service" not in g:
+        database = ComplaintDatabase(app.config["DATABASE_PATH"])
+        g.database = database
+        service = ComplaintService(database)
+        service.time_offset = timedelta(hours=session.get("time_offset_hours", 0))
+        g.service = service
+    return g.service
 
 
-def prompt_int(label: str, minimum: int, maximum: int) -> int:
-    while True:
-        try:
-            value = int(input(label).strip())
-            if minimum <= value <= maximum:
-                return value
-        except ValueError:
-            pass
-        print(f"Enter a whole number from {minimum} to {maximum}.")
-
-
-def prompt_category() -> Category:
-    print("Categories: " + ", ".join(CATEGORIES))
-    while True:
-        value = input("Category: ").strip().lower()
-        if value in CATEGORIES:
-            return value  # type: ignore[return-value]
-        print("Choose one of the listed categories.")
-
-
-def print_complaint(complaint: Complaint) -> None:
-    print(
-        f"[{complaint.id}] {complaint.title} | {complaint.category} | "
-        f"priority={complaint.priority_score:.2f} | {complaint.status} | "
-        f"raised by {complaint.raised_by} | level={complaint.escalation_level}"
-    )
-    print(f"    {complaint.description}")
-
-
-def raise_new_complaint(service: ComplaintService) -> None:
-    title = prompt_non_empty("Title: ")
-    description = prompt_non_empty("Description: ")
-    category = prompt_category()
-    raised_by = prompt_non_empty("Raised by: ")
-    urgency = prompt_int("Urgency (1-5): ", 1, 5)
-    try:
-        complaint = service.raise_complaint(
-            title, description, category, raised_by, urgency
-        )
-    except ValueError as error:
-        print(f"Could not raise complaint: {error}")
-        return
-    print(f"Complaint #{complaint.id} created with priority {complaint.priority_score:.2f}.")
-
-
-def view_all(service: ComplaintService) -> None:
-    complaints = service.all_by_priority()
-    if not complaints:
-        print("No complaints found.")
-        return
-    for complaint in complaints:
-        print_complaint(complaint)
-
-
-def resolve_next(service: ComplaintService) -> None:
-    complaint = service.resolve_next()
-    if complaint is None:
-        print("The processing queue is empty.")
-        return
-    print(f"Resolved complaint #{complaint.id}: {complaint.title}")
-
-
-def search_complaints(service: ComplaintService) -> None:
-    choice = input("Search by (i)d or (c)ategory: ").strip().lower()
-    if choice == "i":
-        complaint_id = prompt_int("Complaint id: ", 1, 2**31 - 1)
-        complaint = service.search_by_id(complaint_id)
-        print_complaint(complaint) if complaint else print("Complaint not found.")
-    elif choice == "c":
-        category = prompt_category()
-        complaints = service.search_by_category(category)
-        if not complaints:
-            print("No complaints in that category.")
-        for complaint in complaints:
-            print_complaint(complaint)
-    else:
-        print("Choose i or c.")
-
-
-def escalation_menu(service: ComplaintService) -> None:
-    choice = input("(v)iew status, (a)dvance time, or (c)heck escalation: ").strip().lower()
-    if choice == "v":
-        complaints = [
-            complaint
-            for complaint in service.by_id.values()
-            if complaint.status != "resolved"
-        ]
-        if not complaints:
-            print("No unresolved complaints.")
-        for complaint in sorted(complaints, key=lambda item: item.id or 0):
-            print(
-                f"Complaint #{complaint.id}: {complaint.status}, "
-                f"level {complaint.escalation_level} "
-                f"({service.escalation_target(complaint.escalation_level)})"
-            )
-    elif choice == "a":
-        while True:
-            try:
-                hours = float(input("Advance simulated hours: "))
-                service.advance_time(hours)
-                print(f"Simulated clock is now {hours:g} hours ahead.")
-                break
-            except ValueError as error:
-                print(f"Invalid time: {error}")
-    elif choice == "c":
-        escalated = service.force_escalation_check()
-        if not escalated:
-            print("No complaints require escalation.")
-        for complaint in escalated:
-            print(
-                f"Complaint #{complaint.id} escalated to "
-                f"{service.escalation_target(complaint.escalation_level)}."
-            )
-    else:
-        print("Choose a or c.")
-
-
-def audit_menu(service: ComplaintService) -> None:
-    complaint_id = prompt_int("Complaint id: ", 1, 2**31 - 1)
-    if service.search_by_id(complaint_id) is None:
-        print("Complaint not found.")
-        return
-    trail = service.audit_trail(complaint_id)
-    if not trail:
-        print("No audit entries.")
-        return
-    for change in trail:
-        print(
-            f"{change.changed_at:%Y-%m-%d %H:%M:%S}: "
-            f"{change.old_status} -> {change.new_status} ({change.note})"
-        )
-
-
-def show_stats(service: ComplaintService) -> None:
-    stats = service.stats()
-    print("By category:", stats["by_category"])
-    print("By status:", stats["by_status"])
-    print(f"Average resolution time: {stats['average_resolution_hours']:.2f} hours")
-
-
-def print_menu() -> None:
-    print(
-        "\nSmart Complaint Management System\n"
-        "1. Raise a new complaint\n"
-        "2. View all complaints\n"
-        "3. Resolve next complaint\n"
-        "4. Search complaint by ID or category\n"
-        "5. View escalation status / force escalation check\n"
-        "6. View audit trail\n"
-        "7. View simple stats\n"
-        "8. Exit"
-    )
-
-
-def run() -> None:
-    database = ComplaintDatabase()
-    service = ComplaintService(database)
-    actions: dict[str, Callable[[], None]] = {
-        "1": lambda: raise_new_complaint(service),
-        "2": lambda: view_all(service),
-        "3": lambda: resolve_next(service),
-        "4": lambda: search_complaints(service),
-        "5": lambda: escalation_menu(service),
-        "6": lambda: audit_menu(service),
-        "7": lambda: show_stats(service),
-    }
-    try:
-        while True:
-            print_menu()
-            choice = input("Choose an option: ").strip()
-            if choice == "8":
-                print("Goodbye.")
-                break
-            action = actions.get(choice)
-            if action:
-                action()
-            else:
-                print("Choose a number from 1 to 8.")
-    finally:
+@app.teardown_appcontext
+def close_database(_error: BaseException | None = None) -> None:
+    database = g.pop("database", None)
+    if database is not None:
         database.close()
 
 
+@app.route("/")
+def dashboard():
+    # Uses the priority heap and same-score FIFO queues via all_by_priority().
+    complaints = get_service().all_by_priority()
+    return render_template("dashboard.html", complaints=complaints)
+
+
+@app.route("/raise", methods=["GET", "POST"])
+def raise_complaint():
+    # Uses service.raise_complaint() to validate and index a complaint by category.
+    categories = ("electrical", "plumbing", "academic", "hostel", "other")
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        description = request.form.get("description", "").strip()
+        category = request.form.get("category", "").strip().lower()
+        raised_by = request.form.get("raised_by", "").strip()
+        try:
+            urgency = int(request.form.get("urgency", ""))
+        except ValueError:
+            urgency = 0
+
+        if category not in categories:
+            flash("Choose a valid complaint category.", "error")
+        elif urgency not in range(1, 6):
+            flash("Urgency must be a whole number from 1 to 5.", "error")
+        else:
+            try:
+                complaint = get_service().raise_complaint(
+                    title, description, category, raised_by, urgency
+                )
+            except ValueError as error:
+                flash(str(error), "error")
+            else:
+                flash(f"Complaint #{complaint.id} was created.", "success")
+                return redirect(url_for("dashboard"))
+
+    return render_template("raise.html", categories=categories)
+
+
+@app.post("/resolve-next")
+def resolve_next():
+    # Uses the priority heap through service.resolve_next() to dispatch one complaint.
+    complaint = get_service().resolve_next()
+    if complaint is None:
+        flash("There are no unresolved complaints to resolve.", "error")
+    else:
+        flash(f"Resolved complaint #{complaint.id}: {complaint.title}.", "success")
+    return redirect(url_for("dashboard"))
+
+
+@app.get("/search")
+def search():
+    # Uses the service hash-map indexes through search_by_id() or search_by_category().
+    categories = ("electrical", "plumbing", "academic", "hostel", "other")
+    search_type = request.args.get("by", "id")
+    query = request.args.get("q", "").strip()
+    results = []
+    searched = bool(query)
+
+    if query and search_type == "id":
+        try:
+            complaint_id = int(query)
+            if complaint_id < 1:
+                raise ValueError
+        except ValueError:
+            flash("Enter a valid positive complaint ID.", "error")
+            searched = False
+        else:
+            complaint = get_service().search_by_id(complaint_id)
+            results = [complaint] if complaint else []
+    elif query and search_type == "category":
+        category = query.lower()
+        if category not in categories:
+            flash("Choose a valid complaint category.", "error")
+            searched = False
+        else:
+            results = get_service().search_by_category(category)
+    elif query:
+        flash("Choose whether to search by ID or category.", "error")
+        searched = False
+
+    return render_template(
+        "search.html",
+        categories=categories,
+        results=results,
+        search_type=search_type,
+        query=query,
+        searched=searched,
+    )
+
+
+@app.route("/escalation", methods=["GET", "POST"])
+def escalation():
+    # Uses by_id and escalation_target(); POST actions call the escalation service methods.
+    service = get_service()
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "advance":
+            try:
+                hours = float(request.form.get("hours", ""))
+            except ValueError:
+                hours = math.nan
+            if not math.isfinite(hours) or hours < 0:
+                flash("Enter a valid non-negative number of hours.", "error")
+            else:
+                try:
+                    service.advance_time(hours)
+                except (OverflowError, ValueError):
+                    flash("The requested time advance is too large.", "error")
+                else:
+                    session["time_offset_hours"] = (
+                        session.get("time_offset_hours", 0) + hours
+                    )
+                    flash(f"Advanced simulated time by {hours:g} hours.", "success")
+        elif action == "check":
+            escalated = service.force_escalation_check()
+            if escalated:
+                flash(f"Escalated {len(escalated)} complaint(s).", "success")
+            else:
+                flash("No complaints currently require escalation.", "success")
+        else:
+            flash("Choose a valid escalation action.", "error")
+        return redirect(url_for("escalation"))
+
+    complaints = sorted(service.by_id.values(), key=lambda complaint: complaint.id or 0)
+    return render_template(
+        "escalation.html",
+        complaints=complaints,
+        target_for=service.escalation_target,
+        time_offset_hours=session.get("time_offset_hours", 0),
+    )
+
+
+@app.get("/audit/<int:complaint_id>")
+def audit(complaint_id: int):
+    # Reads the complaint's audit stack through service.audit_trail().
+    service = get_service()
+    complaint = service.by_id.get(complaint_id)
+    if complaint is None:
+        flash(f"Complaint #{complaint_id} was not found.", "error")
+        return redirect(url_for("dashboard"))
+    trail = service.audit_trail(complaint_id)
+    return render_template("audit.html", complaint=complaint, trail=trail)
+
+
+@app.get("/stats")
+def stats():
+    # Aggregates category, status, and resolution-time data through service.stats().
+    summary = get_service().stats()
+    return render_template("stats.html", summary=summary)
+
+
 if __name__ == "__main__":
-    run()
+    app.run(debug=True)

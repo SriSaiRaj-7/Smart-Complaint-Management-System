@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Search | Smart Complaint Management{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Indexed lookup</p>
+    <h1>Search complaints</h1>
+  </div>
+</div>
+<form class="search-form" action="{{ url_for('search') }}" method="get">
+  <label for="by">Search by</label>
+  <select id="by" name="by">
+    <option value="id" {% if search_type == 'id' %}selected{% endif %}>Complaint ID</option>
+    <option value="category" {% if search_type == 'category' %}selected{% endif %}>Category</option>
+  </select>
+  <label class="visually-hidden" for="q">ID or category</label>
+  <input id="q" name="q" value="{{ query }}" placeholder="Enter an ID or category" required>
+  <button type="submit">Search</button>
+</form>
+
+{% if searched %}
+  <h2 class="results-heading">{{ results|length }} result{% if results|length != 1 %}s{% endif %}</h2>
+  <section class="table-wrap" aria-label="Search results">
+    <table>
+      <thead><tr><th>ID</th><th>Complaint</th><th>Category</th><th>Status</th><th>Priority score</th></tr></thead>
+      <tbody>
+        {% for complaint in results %}
+          <tr>
+            <td>#{{ complaint.id }}</td>
+            <td><a class="complaint-title" href="/audit/{{ complaint.id }}">{{ complaint.title }}</a><small>{{ complaint.description }}</small></td>
+            <td>{{ complaint.category|title }}</td>
+            <td><span class="status status-{{ complaint.status }}">{{ complaint.status|replace('_', ' ')|title }}</span></td>
+            <td>{{ "%.2f"|format(complaint.priority_score) }}</td>
+          </tr>
+        {% else %}
+          <tr><td class="empty" colspan="5">No matching complaints were found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+{% endif %}
+{% endblock %}

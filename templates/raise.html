@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Raise Complaint | Smart Complaint Management{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">New submission</p>
+    <h1>Raise a complaint</h1>
+  </div>
+</div>
+<form class="form-panel" method="post">
+  <label for="title">Title</label>
+  <input id="title" name="title" maxlength="160" required value="{{ request.form.get('title', '') }}">
+
+  <label for="description">Description</label>
+  <textarea id="description" name="description" rows="5" required>{{ request.form.get('description', '') }}</textarea>
+
+  <label for="category">Category</label>
+  <select id="category" name="category" required>
+    <option value="">Select a category</option>
+    {% for category in categories %}
+      <option value="{{ category }}" {% if request.form.get('category') == category %}selected{% endif %}>{{ category|title }}</option>
+    {% endfor %}
+  </select>
+
+  <label for="raised_by">Raised by</label>
+  <input id="raised_by" name="raised_by" maxlength="120" required value="{{ request.form.get('raised_by', '') }}">
+
+  <label for="urgency">Urgency <span class="hint">1 (low) to 5 (high)</span></label>
+  <input id="urgency" name="urgency" type="number" min="1" max="5" required value="{{ request.form.get('urgency', '3') }}">
+
+  <div class="form-actions">
+    <button type="submit">Submit complaint</button>
+    <a href="{{ url_for('dashboard') }}">Cancel</a>
+  </div>
+</form>
+{% endblock %}

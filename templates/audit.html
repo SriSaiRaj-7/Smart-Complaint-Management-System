@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Audit Trail | Smart Complaint Management{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Status history</p>
+    <h1>Complaint #{{ complaint.id }}</h1>
+  </div>
+  <a href="{{ url_for('dashboard') }}">Back to dashboard</a>
+</div>
+<section class="record-summary">
+  <h2>{{ complaint.title }}</h2>
+  <p>{{ complaint.description }}</p>
+  <p class="muted">{{ complaint.category|title }} · {{ complaint.status|replace('_', ' ')|title }} · raised by {{ complaint.raised_by }}</p>
+</section>
+<h2 class="section-heading">Audit trail</h2>
+<section class="table-wrap" aria-label="Audit trail newest first">
+  <table>
+    <thead><tr><th>Changed at</th><th>Previous status</th><th>New status</th><th>Note</th></tr></thead>
+    <tbody>
+      {% for change in trail %}
+        <tr>
+          <td>{{ change.changed_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+          <td>{{ change.old_status|replace('_', ' ')|title }}</td>
+          <td>{{ change.new_status|replace('_', ' ')|title }}</td>
+          <td>{{ change.note }}</td>
+        </tr>
+      {% else %}
+        <tr><td class="empty" colspan="4">No audit entries are recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

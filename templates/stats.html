@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Statistics | Smart Complaint Management{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Service overview</p>
+    <h1>Statistics</h1>
+  </div>
+</div>
+<section class="average-time" aria-label="Average resolution time">
+  <p class="eyebrow">Average resolution time</p>
+  <p class="metric">{{ "%.2f"|format(summary['average_resolution_hours']) }} <span>hours</span></p>
+</section>
+<div class="stats-grid">
+  <section>
+    <h2>By category</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Category</th><th>Complaints</th></tr></thead>
+        <tbody>
+          {% for category, count in summary['by_category']|dictsort %}
+            <tr><td>{{ category|title }}</td><td>{{ count }}</td></tr>
+          {% else %}
+            <tr><td class="empty" colspan="2">No complaints yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section>
+    <h2>By status</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Status</th><th>Complaints</th></tr></thead>
+        <tbody>
+          {% for status, count in summary['by_status']|dictsort %}
+            <tr><td>{{ status|replace('_', ' ')|title }}</td><td>{{ count }}</td></tr>
+          {% else %}
+            <tr><td class="empty" colspan="2">No complaints yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

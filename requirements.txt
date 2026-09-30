@@ -1,1 +1,1 @@
-# Smart Complaint Management System uses Python's standard library only.
+Flask>=3.0,<4.0

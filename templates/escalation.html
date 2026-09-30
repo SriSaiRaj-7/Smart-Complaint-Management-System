@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Escalation | Smart Complaint Management{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <p class="eyebrow">Escalation chain</p>
+    <h1>Escalation status</h1>
+  </div>
+  <p class="time-offset">Simulated time advanced: {{ "%.2f"|format(time_offset_hours) }} hours</p>
+</div>
+
+<div class="control-row">
+  <form class="inline-form" method="post">
+    <input type="hidden" name="action" value="advance">
+    <label for="hours">Advance time by hours</label>
+    <input id="hours" name="hours" type="number" min="0" step="any" required>
+    <button type="submit">Advance time</button>
+  </form>
+  <form method="post">
+    <input type="hidden" name="action" value="check">
+    <button class="button-secondary" type="submit">Check escalation now</button>
+  </form>
+</div>
+
+<section class="table-wrap" aria-label="Escalation status by complaint">
+  <table>
+    <thead><tr><th>ID</th><th>Complaint</th><th>Status</th><th>Level</th><th>Current target</th></tr></thead>
+    <tbody>
+      {% for complaint in complaints %}
+        <tr>
+          <td>#{{ complaint.id }}</td>
+          <td>{{ complaint.title }}</td>
+          <td><span class="status status-{{ complaint.status }}">{{ complaint.status|replace('_', ' ')|title }}</span></td>
+          <td>{{ complaint.escalation_level }}</td>
+          <td>{{ target_for(complaint.escalation_level)|title }}</td>
+        </tr>
+      {% else %}
+        <tr><td class="empty" colspan="5">No complaints to display.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}
